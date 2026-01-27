@@ -122,8 +122,9 @@ class TokenomicsModel:
             comm_size_GB = comm_size_bytes / 1e9
             # Assume 2 communications per layer
             total_comm = 2 * self.model.num_hidden_layers * comm_size_GB
-            # Time based on NVLink bandwidth
-            comm_overhead = total_comm / self.hardware.nvlink_bandwidth_GBs
+            # Time based on NVLink bandwidth (fallback to PCIe 4.0 x16 if no NVLink)
+            effective_bandwidth = self.hardware.nvlink_bandwidth_GBs if self.hardware.nvlink_bandwidth_GBs > 0 else 32.0
+            comm_overhead = total_comm / effective_bandwidth
         
         return compute_time + comm_overhead
     
@@ -146,12 +147,13 @@ class TokenomicsModel:
             # For each token, we need to communicate smaller activations
             comm_size_bytes = batch_size * self.model.hidden_size * self.model.dtype_bytes
             comm_size_GB = comm_size_bytes / 1e9
-            
+
             # Assume 2 communications per layer
             total_comm = 2 * self.model.num_hidden_layers * comm_size_GB
-            
-            # Time based on NVLink bandwidth
-            comm_overhead = total_comm / self.hardware.nvlink_bandwidth_GBs
+
+            # Time based on NVLink bandwidth (fallback to PCIe 4.0 x16 if no NVLink)
+            effective_bandwidth = self.hardware.nvlink_bandwidth_GBs if self.hardware.nvlink_bandwidth_GBs > 0 else 32.0
+            comm_overhead = total_comm / effective_bandwidth
         
         # Determine the bottleneck
         bottleneck = "memory" if memory_load_time > compute_time else "compute"

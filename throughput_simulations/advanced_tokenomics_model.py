@@ -260,8 +260,10 @@ class AdvancedTokenomicsModel:
         
         # Data transfer time (depends on size and NVLink bandwidth)
         # Add contention factor that increases with batch size
+        # Fallback to PCIe 4.0 x16 (32 GB/s) if no NVLink
+        effective_bandwidth = self.hardware.nvlink_bandwidth_GBs if self.hardware.nvlink_bandwidth_GBs > 0 else 32.0
         contention_factor = 1.0 + 0.1 * math.log2(batch_size) if batch_size > 1 else 1.0
-        data_transfer_time = (data_size_GB / self.hardware.nvlink_bandwidth_GBs) * contention_factor
+        data_transfer_time = (data_size_GB / effective_bandwidth) * contention_factor
         
         return total_fixed_latency + data_transfer_time
     
