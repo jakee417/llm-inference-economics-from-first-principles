@@ -10,7 +10,7 @@ class ModelParams:
     num_key_value_heads: int = 8
     intermediate_size: int = 28672
     vocab_size: int = 128256
-    dtype_bytes: int = 2  # bfloat16 = 2 bytes
+    dtype_bytes: float = 2  # bfloat16 = 2 bytes, fp8 = 1 byte, int4 = 0.5 bytes
     
     def __post_init__(self):
         # If using preset models, update parameters accordingly

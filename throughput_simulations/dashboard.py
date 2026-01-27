@@ -197,7 +197,7 @@ def run_sweep_analysis(sweep_var, base_config, model_choice, gpu_choice, gpu_pre
                     dtype_bytes=base_config["model"]["dtype_bytes"]
                 )
             else:
-                mdl = ModelParams(name=base_config["model"]["name"])
+                mdl = ModelParams(name=base_config["model"]["name"], dtype_bytes=base_config["model"]["dtype_bytes"])
 
             # Create tokenomics model
             if use_advanced_model:
@@ -246,6 +246,7 @@ gpu_presets = {
     "NVIDIA A100 40GB": {"tflops": 312, "memory_bandwidth_GBs": 1555, "memory_size_GB": 40, "nvlink_bandwidth_GBs": 300},
     "NVIDIA L40S": {"tflops": 366, "memory_bandwidth_GBs": 864, "memory_size_GB": 48, "nvlink_bandwidth_GBs": 0},
     "NVIDIA RTX 4090": {"tflops": 330, "memory_bandwidth_GBs": 1008, "memory_size_GB": 24, "nvlink_bandwidth_GBs": 0},
+    "NVIDIA RTX 5060 Laptop": {"tflops": 194, "memory_bandwidth_GBs": 256, "memory_size_GB": 8, "nvlink_bandwidth_GBs": 0},
     "Custom": None
 }
 
@@ -357,13 +358,23 @@ if model_choice == "Custom":
     )
     dtype_bytes = st.sidebar.selectbox(
         "Data Type",
-        [("bfloat16", 2), ("float16", 2), ("float32", 4)],
+        [("bfloat16", 2), ("float16", 2), ("float32", 4), ("fp8", 1), ("int8", 1), ("int4", 0.5)],
         format_func=lambda x: x[0],
-        help="Numerical precision for model weights. bfloat16/float16 use 2 bytes per parameter, float32 uses 4 bytes. Lower precision reduces memory and increases throughput."
+        help="Numerical precision for model weights. bfloat16/float16 use 2 bytes, float32 uses 4 bytes, fp8/int8 use 1 byte, int4 uses 0.5 bytes per parameter. Lower precision reduces memory and increases throughput but may impact accuracy."
     )[1]
     model_name = "custom"
 else:
     model_name = model_presets[model_choice]
+
+# Data type selector (applies to all models)
+dtype_options = [("bfloat16", 2), ("float16", 2), ("float32", 4), ("fp8", 1), ("int8", 1), ("int4", 0.5)]
+if model_choice != "Custom":
+    dtype_bytes = st.sidebar.selectbox(
+        "Data Type",
+        dtype_options,
+        format_func=lambda x: x[0],
+        help="Numerical precision for model weights. bfloat16/float16 use 2 bytes, float32 uses 4 bytes, fp8/int8 use 1 byte, int4 uses 0.5 bytes per parameter. Lower precision reduces memory and increases throughput but may impact accuracy."
+    )[1]
 
 # === Inference Settings ===
 st.sidebar.subheader("Inference Settings")
@@ -427,7 +438,7 @@ if model_choice == "Custom":
         dtype_bytes=dtype_bytes
     )
 else:
-    model = ModelParams(name=model_name)
+    model = ModelParams(name=model_name, dtype_bytes=dtype_bytes)
 
 # Create the tokenomics model
 if use_advanced_model:
@@ -824,13 +835,9 @@ else:
         | **Total** | {metrics['model_size_gb'] + metrics['kv_cache_gb']:.2f} GB | {metrics['memory_time_ms']:.4f} ms | 100% |
         """)
 
-        # Visual bar showing the split
+        # Visual bar showing KV cache as percentage of total memory load
         st.caption("Model Weights vs KV Cache (memory load time)")
-        col_model, col_kv = st.columns([max(model_load_pct, 1), max(kv_load_pct, 1)])
-        with col_model:
-            st.markdown(f"**Model**: {model_load_pct:.0f}%")
-        with col_kv:
-            st.markdown(f"**KV Cache**: {kv_load_pct:.0f}%")
+        st.progress(kv_load_pct / 100, text=f"KV Cache: {kv_load_pct:.1f}% of memory load time")
 
         if use_advanced_model:
             st.subheader("Advanced Model Factors")
