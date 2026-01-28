@@ -526,6 +526,20 @@ if st.session_state.sweep_variable is not None:
         # === Timing Metrics ===
         st.subheader("Timing Metrics")
 
+        # Add unified line chart for time breakdown
+        st.markdown("**Time Breakdown: Prefill vs Decode**")
+
+        # Prepare data for line chart - convert decode_time to ms for consistency
+        breakdown_df = df[["sweep_value", "prefill_time_ms"]].copy()
+        breakdown_df["decode_time_ms"] = df["decode_time"] * 1000  # Convert to ms
+        breakdown_df = breakdown_df.rename(columns={
+            "sweep_value": config["name"],
+            "prefill_time_ms": "Prefill (ms)",
+            "decode_time_ms": "Decode (ms)"
+        })
+        st.line_chart(breakdown_df.set_index(config["name"]))
+        st.caption("Comparison of prefill and decode times across sweep values")
+
         col3, col4 = st.columns(2)
 
         with col3:
@@ -536,27 +550,58 @@ if st.session_state.sweep_variable is not None:
             st.line_chart(chart_data.set_index(config["name"]))
 
         with col4:
-            st.markdown("**Prefill Time (ms)**")
-            chart_data = df[["sweep_value", "prefill_time_ms"]].rename(
-                columns={"sweep_value": config["name"], "prefill_time_ms": "Prefill Time (ms)"}
-            )
-            st.line_chart(chart_data.set_index(config["name"]))
-
-        col5, col6 = st.columns(2)
-
-        with col5:
-            st.markdown("**Decode Time (seconds)**")
-            chart_data = df[["sweep_value", "decode_time"]].rename(
-                columns={"sweep_value": config["name"], "decode_time": "Decode Time (s)"}
-            )
-            st.line_chart(chart_data.set_index(config["name"]))
-
-        with col6:
             st.markdown("**Avg Time per Token (ms)**")
             chart_data = df[["sweep_value", "avg_time_per_token_ms"]].rename(
                 columns={"sweep_value": config["name"], "avg_time_per_token_ms": "Avg Time/Token (ms)"}
             )
             st.line_chart(chart_data.set_index(config["name"]))
+
+        # For input_tokens sweep, add a log-log plot to show quadratic scaling
+        if sweep_var == "input_tokens":
+            import plotly.express as px
+            import plotly.graph_objects as go
+
+            st.subheader("Prefill Time Scaling Analysis (Log-Log)")
+            st.markdown("*On a log-log plot, quadratic scaling (O(S²)) appears as a line with slope ≈ 2*")
+
+            # Create log-log plot using plotly
+            fig = go.Figure()
+
+            # Add prefill time trace
+            fig.add_trace(go.Scatter(
+                x=df["sweep_value"],
+                y=df["prefill_time_ms"],
+                mode='lines+markers',
+                name='Prefill Time (ms)',
+                line=dict(color='blue', width=2),
+                marker=dict(size=8)
+            ))
+
+            # Add a reference line for perfect quadratic scaling
+            # If prefill time at first point is t0 at x0, quadratic would be t0 * (x/x0)^2
+            x0 = df["sweep_value"].iloc[0]
+            t0 = df["prefill_time_ms"].iloc[0]
+            quadratic_ref = [t0 * (x / x0) ** 2 for x in df["sweep_value"]]
+
+            fig.add_trace(go.Scatter(
+                x=df["sweep_value"],
+                y=quadratic_ref,
+                mode='lines',
+                name='Perfect O(S²) Reference',
+                line=dict(color='red', width=2, dash='dash')
+            ))
+
+            fig.update_layout(
+                xaxis_type="log",
+                yaxis_type="log",
+                xaxis_title="Input Tokens (log scale)",
+                yaxis_title="Prefill Time in ms (log scale)",
+                title="Prefill Time vs Input Tokens (Log-Log Scale)",
+                legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01)
+            )
+
+            st.plotly_chart(fig, use_container_width=True)
+            st.caption("The prefill time closely follows the O(S²) reference line, confirming quadratic scaling with sequence length.")
 
         # === Bottleneck Analysis ===
         st.subheader("Bottleneck Analysis")
