@@ -1533,4 +1533,7 @@ else:
     Equations derived from transformer architecture analysis with Llama-style optimizations (GQA, RoPE, SwiGLU).*
 
     **Tip:** Click the "Sweep" button next to any slider to see how that variable affects all output metrics.
+
+    ---
+    *Inspired by [LLM Inference Economics: Cost-Based Analysis and Future Trends](https://substack.com/home/post/p-163319195)*
     """)
