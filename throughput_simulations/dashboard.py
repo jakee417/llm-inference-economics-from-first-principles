@@ -104,14 +104,14 @@ def compute_metrics(tokenomics, input_tokens, output_tokens, batch_size, hardwar
     total_time = tokenomics.total_inference_time(input_tokens, output_tokens, batch_size)
     total_throughput = tokenomics.calculate_total_throughput(input_tokens, output_tokens, batch_size)
     per_request_throughput = tokenomics.calculate_per_request_throughput(input_tokens, output_tokens, batch_size)
-    breakdown = tokenomics.decode_time_breakdown(input_tokens, batch_size)
+    breakdown = tokenomics.decode_time_breakdown(input_tokens + output_tokens, batch_size)
     kv_cache_bytes = tokenomics.calculate_kv_cache_size(input_tokens + output_tokens, batch_size)
 
     compute_memory_ratio = breakdown['compute_time'] / breakdown['memory_time'] if breakdown['memory_time'] > 0 else float('inf')
 
     # Calculate model vs KV cache load time breakdown (decode phase)
     model_size_gb = tokenomics.model.model_size_bytes / 1e9
-    kv_cache_size_gb = tokenomics.calculate_kv_cache_size(input_tokens, batch_size) / 1e9
+    kv_cache_size_gb = tokenomics.calculate_kv_cache_size(input_tokens + output_tokens, batch_size) / 1e9
 
     # Get effective bandwidth (use the one from breakdown if available, otherwise calculate)
     if hasattr(tokenomics, 'effective_memory_bandwidth'):
@@ -806,7 +806,7 @@ else:
     # === Detailed Breakdown ===
     st.header("Detailed Time Breakdown")
 
-    breakdown = tokenomics.decode_time_breakdown(input_tokens, batch_size)
+    breakdown = tokenomics.decode_time_breakdown(input_tokens + output_tokens, batch_size)
 
     detail_col1, detail_col2 = st.columns(2)
 
@@ -824,20 +824,21 @@ else:
 
         # Memory load breakdown: model weights vs KV cache
         st.subheader("Memory Load Breakdown")
-        model_load_pct = (metrics['model_load_time_ms'] / metrics['memory_time_ms'] * 100) if metrics['memory_time_ms'] > 0 else 0
-        kv_load_pct = (metrics['kv_cache_load_time_ms'] / metrics['memory_time_ms'] * 100) if metrics['memory_time_ms'] > 0 else 0
+        total_load_time = metrics['model_load_time_ms'] + metrics['kv_cache_load_time_ms']
+        model_load_pct = (metrics['model_load_time_ms'] / total_load_time * 100) if total_load_time > 0 else 100
+        kv_load_pct = (metrics['kv_cache_load_time_ms'] / total_load_time * 100) if total_load_time > 0 else 0
 
         st.markdown(f"""
-        | Component | Size | Load Time | % of Memory Time |
-        |-----------|------|-----------|------------------|
+        | Component | Size | Load Time | % |
+        |-----------|------|-----------|---|
         | Model Weights | {metrics['model_size_gb']:.2f} GB | {metrics['model_load_time_ms']:.4f} ms | {model_load_pct:.1f}% |
         | KV Cache | {metrics['kv_cache_gb']:.2f} GB | {metrics['kv_cache_load_time_ms']:.4f} ms | {kv_load_pct:.1f}% |
-        | **Total** | {metrics['model_size_gb'] + metrics['kv_cache_gb']:.2f} GB | {metrics['memory_time_ms']:.4f} ms | 100% |
+        | **Total** | {metrics['model_size_gb'] + metrics['kv_cache_gb']:.2f} GB | {total_load_time:.4f} ms | 100% |
         """)
 
-        # Visual bar showing KV cache as percentage of total memory load
-        st.caption("Model Weights vs KV Cache (memory load time)")
-        st.progress(kv_load_pct / 100, text=f"KV Cache: {kv_load_pct:.1f}% of memory load time")
+        # Visual bar showing KV cache as proportion of memory load
+        kv_bar_pct = kv_load_pct / 100
+        st.progress(kv_bar_pct)
 
         if use_advanced_model:
             st.subheader("Advanced Model Factors")
